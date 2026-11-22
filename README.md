@@ -17,7 +17,7 @@ CoreProtect is the [#1 anti-griefing plugin](https://bstats.org/plugin/bukkit/Co
 | CoreProtect Discord: | [discord.gg/b4DZ4jy](https://discord.gg/b4DZ4jy) |
 | CoreProtect Patreon: | [patreon.com/coreprotect](https://www.patreon.com/coreprotect) |
 | CoreProtect Documentation: | [docs.coreprotect.net](https://docs.coreprotect.net) |
-| Downloads for MC 1.14 - 26.2: | [coreprotect.net/latest](https://coreprotect.net/latest/) |
+| Downloads for MC 1.14 - 26.3: | [coreprotect.net/latest](https://coreprotect.net/latest/) |
 | Downloads for MC 1.8 - 1.12: | [coreprotect.net/legacy](https://coreprotect.net/legacy/) |
 | Downloads for Fabric: | [coreprotect.net/fabric](https://coreprotect.net/fabric) |
 | Downloads for Hytale: | [coreprotect.net/hytale](https://coreprotect.net/hytale) |
@@ -41,7 +41,7 @@ Maven:
 <dependency>
     <groupId>net.coreprotect</groupId>
     <artifactId>coreprotect</artifactId>
-    <version>23.2</version>
+    <version>25.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -65,7 +65,7 @@ To support the project and obtain a donation key, visit [coreprotect.net/donate]
 * Rollbacks and restores with lag-free processing.
 * Multi-threaded to ensure server performance is never impacted.
 * No configuration required. Install the plugin, and you're good to go.
-* SQLite storage by default, with optional MySQL support.
+* Embedded DuckDB columnar storage by default, with optional ClickHouse, SQLite, and MySQL support.
 * Supports Bukkit, Spigot, Paper, Folia, MultiPaper, and more.
 * Permission system support and advanced lookup permissions.
 * Easy-to-use commands and inspector.

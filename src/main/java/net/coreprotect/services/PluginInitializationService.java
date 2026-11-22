@@ -9,13 +9,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import net.coreprotect.CoreProtect;
 import net.coreprotect.command.CommandHandler;
+import net.coreprotect.command.PurgeCommand;
 import net.coreprotect.command.TabHandler;
-import net.coreprotect.config.Config;
 import net.coreprotect.config.ConfigHandler;
 import net.coreprotect.consumer.Consumer;
 import net.coreprotect.language.Language;
 import net.coreprotect.language.Phrase;
 import net.coreprotect.listener.ListenerHandler;
+import net.coreprotect.listener.player.inspector.BaseInspector;
 import net.coreprotect.thread.CacheHandler;
 import net.coreprotect.thread.NetworkHandler;
 import net.coreprotect.thread.Scheduler;
@@ -23,12 +24,15 @@ import net.coreprotect.thread.TickTimeMonitor;
 import net.coreprotect.utility.Chat;
 import net.coreprotect.utility.ChatUtils;
 import net.coreprotect.utility.Extensions;
+import net.coreprotect.utility.EntitySpawnTracking;
 import net.coreprotect.utility.ErrorReporter;
 
 /**
  * Service responsible for plugin initialization tasks
  */
 public class PluginInitializationService {
+
+    private static volatile Metrics metrics;
 
     private PluginInitializationService() {
         throw new IllegalStateException("Utility class");
@@ -45,6 +49,10 @@ public class PluginInitializationService {
         // Load language phrases
         Language.loadPhrases();
 
+        // Capture primary-thread server port and cached license before startup checks
+        NetworkHandler.setServerPort(plugin.getServer().getPort());
+        NetworkHandler.loadCachedLicense();
+
         // Perform version checks
         boolean start = VersionCheckService.performVersionChecks();
         if (!start) {
@@ -53,8 +61,8 @@ public class PluginInitializationService {
 
         try {
             // Initialize core components
+            PurgeCommand.resetShutdownCancellation();
             Consumer.initialize();
-            new ListenerHandler(plugin);
 
             // Register commands
             registerCommands(plugin);
@@ -64,6 +72,9 @@ public class PluginInitializationService {
 
             // Initialize configuration
             start = ConfigHandler.performInitialization(true);
+            if (start) {
+                new ListenerHandler(plugin);
+            }
         }
         catch (Exception e) {
             ErrorReporter.report(e);
@@ -91,21 +102,22 @@ public class PluginInitializationService {
      *            The CoreProtect plugin instance
      */
     private static void registerCommands(JavaPlugin plugin) {
+        TabHandler tabHandler = new TabHandler();
         plugin.getCommand("coreprotect").setExecutor(CommandHandler.getInstance());
-        plugin.getCommand("coreprotect").setTabCompleter(new TabHandler());
+        plugin.getCommand("coreprotect").setTabCompleter(tabHandler);
         plugin.getCommand("core").setExecutor(CommandHandler.getInstance());
-        plugin.getCommand("core").setTabCompleter(new TabHandler());
+        plugin.getCommand("core").setTabCompleter(tabHandler);
         plugin.getCommand("co").setExecutor(CommandHandler.getInstance());
-        plugin.getCommand("co").setTabCompleter(new TabHandler());
+        plugin.getCommand("co").setTabCompleter(tabHandler);
     }
 
     /**
      * Creates the plugin data directory if it doesn't exist
      */
     private static void createDataDirectory() {
-        boolean exists = (new File(ConfigHandler.path)).exists();
-        if (!exists) {
-            new File(ConfigHandler.path).mkdir();
+        File dataDirectory = new File(ConfigHandler.path);
+        if (!dataDirectory.exists()) {
+            dataDirectory.mkdirs();
         }
     }
 
@@ -119,11 +131,14 @@ public class PluginInitializationService {
         PluginDescriptionFile pluginDescription = plugin.getDescription();
         ChatUtils.sendConsoleComponentStartup(Bukkit.getServer().getConsoleSender(), Phrase.build(Phrase.ENABLE_SUCCESS, ConfigHandler.EDITION_NAME));
 
-        if (Config.getGlobal().MYSQL) {
+        if (ConfigHandler.databaseType.isMySQL()) {
             Chat.console(Phrase.build(Phrase.USING_MYSQL));
         }
-        else {
+        else if (ConfigHandler.databaseType.isSQLite()) {
             Chat.console(Phrase.build(Phrase.USING_SQLITE));
+        }
+        else {
+            Chat.console(Phrase.build(Phrase.USING_DATABASE, ConfigHandler.databaseType.getDisplayName()));
         }
 
         Chat.console("--------------------");
@@ -142,8 +157,7 @@ public class PluginInitializationService {
         // Start network handler
         Scheduler.scheduleSyncDelayedTask(plugin, () -> {
             try {
-                Thread networkHandler = new Thread(new NetworkHandler(true, true));
-                networkHandler.start();
+                NetworkHandler.startThread(new NetworkHandler(true, true));
             }
             catch (Exception e) {
                 ErrorReporter.report(e);
@@ -154,12 +168,13 @@ public class PluginInitializationService {
         TickTimeMonitor.initialize(plugin);
 
         // Start cache cleanup thread
-        Thread cacheCleanUpThread = new Thread(new CacheHandler());
-        cacheCleanUpThread.start();
+        CacheHandler.startThread();
 
-        // Start consumer
+        // Start inspector lookup threads
+        BaseInspector.startLookups();
+
         Consumer.startConsumer();
-
+        EntitySpawnTracking.initializeLoadedEntities();
         Extensions.startBackgroundService();
     }
 
@@ -171,10 +186,28 @@ public class PluginInitializationService {
      */
     private static void enableMetrics(JavaPlugin plugin) {
         try {
-            new Metrics(plugin, 2876);
+            metrics = new Metrics(plugin, 2876);
         }
         catch (Exception e) {
             // Failed to connect to bStats server or something else went wrong
+        }
+    }
+
+    /**
+     * Stops the bStats scheduler so its thread does not outlive a disable
+     */
+    public static void disableMetrics() {
+        Metrics current = metrics;
+        metrics = null;
+        if (current == null) {
+            return;
+        }
+
+        try {
+            current.shutdown();
+        }
+        catch (Exception e) {
+            ErrorReporter.report(e);
         }
     }
 }

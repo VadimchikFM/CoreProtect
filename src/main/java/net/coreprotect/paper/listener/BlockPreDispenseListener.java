@@ -19,11 +19,12 @@ import net.coreprotect.config.Config;
 import net.coreprotect.config.ConfigHandler;
 import net.coreprotect.consumer.Queue;
 import net.coreprotect.listener.player.InventoryChangeListener;
+import net.coreprotect.paper.PaperAdapter;
 
 public final class BlockPreDispenseListener extends Queue implements Listener {
 
-    public static boolean useBlockPreDispenseEvent = true;
-    public static boolean useForDroppers = false;
+    public static volatile boolean useBlockPreDispenseEvent = true;
+    public static volatile boolean useForDroppers = false;
 
     // Maximum time to keep entries in the cache (in milliseconds)
     private static final long CACHE_EXPIRY_TIME = 5000; // 5 seconds
@@ -33,7 +34,7 @@ public final class BlockPreDispenseListener extends Queue implements Listener {
         Block block = event.getBlock();
         World world = block.getWorld();
         Config config = Config.getConfig(world);
-        if (!config.BLOCK_PLACE) {
+        if (event.isCancelled()) {
             return;
         }
 
@@ -84,7 +85,7 @@ public final class BlockPreDispenseListener extends Queue implements Listener {
 
             // Process the inventory transaction
             String user = "#dispenser";
-            BlockState blockState = block.getState();
+            BlockState blockState = PaperAdapter.ADAPTER.getBlockState(block, false);
             ItemStack[] inventory = ((InventoryHolder) blockState).getInventory().getStorageContents();
             InventoryChangeListener.inventoryTransaction(user, blockState, inventory);
         }
